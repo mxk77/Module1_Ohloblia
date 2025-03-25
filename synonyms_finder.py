@@ -5,7 +5,7 @@ import json
 from collections import OrderedDict
 
 def get_wiktionary_synonyms(word, lang='uk'):
-    """Get synonyms from Wiktionary"""
+    """Отримати синоніми з Wiktionary"""
     try:
         search_word = word.lower()
         url = "https://en.wiktionary.org/w/api.php"
@@ -30,44 +30,44 @@ def get_wiktionary_synonyms(word, lang='uk'):
         
         return list(OrderedDict.fromkeys(synonyms))
     except Exception as e:
-        st.error(f"Wiktionary error: {str(e)}")
+        st.error(f"Помилка Wiktionary: {str(e)}")
         return []
 
 def main():
-    st.set_page_config(page_title="Synonym Replacer", layout="centered")
-    st.title("🔍 Synonym Replacer")
+    st.set_page_config(page_title="Замінник синонімів", layout="centered")
+    st.title("🔍 Замінник синонімів")
     
-    # Load custom dictionary
+    # Завантажити власний словник
     custom_dict = {}
     with st.sidebar:
-        st.header("Settings")
+        st.header("Налаштування ⚙️")
         dict_file = st.file_uploader(
-            "Upload custom dictionary (JSON)",
+            "Завантажити власний словник (JSON)",
             type=["json"],
-            help="Example: {'word': ['synonym1', 'synonym2']}"
+            help="Приклад: {'word': ['синонім1', 'синонім2']}"
         )
         if dict_file:
             try:
                 custom_dict = json.load(dict_file)
-                st.success(f"Loaded {len(custom_dict)} entries!")
+                st.success(f"Завантажено {len(custom_dict)} записів!")
             except Exception as e:
-                st.error(f"Error loading dictionary: {str(e)}")
+                st.error(f"Помилка завантаження словника: {str(e)}")
 
-    # Main interface
+    # Головний інтерфейс
     input_text = st.text_area(
-        "Enter text:",
+        "Введіть текст:",
         "",
-        help="Enter text to replace words with synonyms",
-        placeholder="e.g., \"A sample text to process\"",
+        help="Введіть текст для заміни слів на синоніми",
+        placeholder="наприклад, \"Приклад тексту для обробки\"",
         height=150
     )
 
-    if st.button("Process Text"):
+    if st.button("Обробити текст"):
         if not input_text.strip():
-            st.error("Please enter some text!")
+            st.error("Будь ласка, введіть текст!")
             return
 
-        # Tokenize text into words and non-words
+        # Токенізація тексту на слова та не-слова
         tokens = re.findall(r'\w+|\W+', input_text)
         modified_tokens = []
         synonym_report = {}
@@ -77,11 +77,11 @@ def main():
                 original_word = token
                 search_word = original_word.lower()
 
-                # Get synonyms from both sources
+                # Отримати синоніми з обох джерел
                 custom_synonyms = custom_dict.get(search_word, [])
                 wiki_synonyms = get_wiktionary_synonyms(search_word)
 
-                # Find first available synonym
+                # Знайти перший доступний синонім
                 first_synonym = None
                 source = None
                 if custom_synonyms:
@@ -104,32 +104,33 @@ def main():
             else:
                 modified_tokens.append(token)
 
-        # Rebuild modified text
+        # Відновити змінений текст
         modified_text = ''.join(modified_tokens)
 
-        # Display results
-        st.subheader("Modified Text")
-        st.text_area("Result", modified_text, height=300, key="modified_text")
+        # Відобразити результати
+        st.subheader("Змінений текст")
+        st.text_area("Результат", modified_text, height=300, key="modified_text")
 
-        # Show synonym blocks
+        # Показати блоки синонімів
         if synonym_report:
-            st.subheader("Replaced Words")
+            st.subheader("Замінені слова")
             for word, data in synonym_report.items():
-                with st.expander(f"{word} → {data['replaced_with']} ({data['source']})"):
+                source_name = "Власний" if data['source'] == 'custom' else "Wiktionary"
+                with st.expander(f"{word} → {data['replaced_with']} ({source_name})"):
                     if data['custom_synonyms']:
-                        st.write(f"**Custom synonyms:** {', '.join(data['custom_synonyms'])}")
+                        st.write(f"**Користувацькі синоніми:** {', '.join(data['custom_synonyms'])}")
                     if data['wiki_synonyms']:
-                        st.write(f"**Wiktionary synonyms:** {', '.join(data['wiki_synonyms'])}")
+                        st.write(f"**Синоніми з Wiktionary:** {', '.join(data['wiki_synonyms'])}")
             
-            # Add download button
+            # Додати кнопку для завантаження
             st.download_button(
-                label="Download Modified Text",
+                label="Завантажити змінений текст",
                 data=modified_text,
-                file_name="synonym_replaced_text.txt",
+                file_name="замінений_текст.txt",
                 mime="text/plain"
             )
         else:
-            st.warning("No words were replaced with synonyms.")
+            st.warning("Жодне слово не було замінено синонімами.")
 
 if __name__ == "__main__":
     main()
