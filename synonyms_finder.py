@@ -5,9 +5,8 @@ import json
 from collections import OrderedDict
 
 def get_wiktionary_synonyms(word, lang='uk'):
-    """Отримання синонімів з Wiktionary"""
+    """Get synonyms from Wiktionary"""
     try:
-        # Конвертуємо слово до нижнього регістру для пошуку
         search_word = word.lower()
         url = "https://en.wiktionary.org/w/api.php"
         params = {
@@ -31,96 +30,106 @@ def get_wiktionary_synonyms(word, lang='uk'):
         
         return list(OrderedDict.fromkeys(synonyms))
     except Exception as e:
-        st.error(f"Помилка отримання даних з Вікісловника: {str(e)}")
+        st.error(f"Wiktionary error: {str(e)}")
         return []
 
 def main():
-    st.set_page_config(page_title="Пошук синонімів", layout="centered")
-    st.title("🔍 Пошук синонімів")
+    st.set_page_config(page_title="Synonym Replacer", layout="centered")
+    st.title("🔍 Synonym Replacer")
     
-    # Завантаження власного словника
+    # Load custom dictionary
     custom_dict = {}
     with st.sidebar:
-        st.header("Налаштування")
+        st.header("Settings")
         dict_file = st.file_uploader(
-            "Завантажте власний словник (JSON)",
+            "Upload custom dictionary (JSON)",
             type=["json"],
-            help="Приклад: {'слово': ['синонім1', 'синонім2']}"
+            help="Example: {'word': ['synonym1', 'synonym2']}"
         )
         if dict_file:
             try:
                 custom_dict = json.load(dict_file)
-                st.success(f"Завантажено {len(custom_dict)} записів!")
+                st.success(f"Loaded {len(custom_dict)} entries!")
             except Exception as e:
-                st.error(f"Помилка завантаження файлу: {str(e)}")
+                st.error(f"Error loading dictionary: {str(e)}")
 
-    # Головний інтерфейс з підтримкою Enter
-    word = st.text_input(
-        "Введіть одне слово:",
+    # Main interface
+    input_text = st.text_area(
+        "Enter text:",
         "",
-        key="search_input",
-        help="Натисніть Enter для пошуку",
-        placeholder="наприклад: \"гарний\""
-    ).strip()
+        help="Enter text to replace words with synonyms",
+        placeholder="e.g., \"A sample text to process\"",
+        height=150
+    )
 
-    # Обробка пошуку при натиску кнопки або Enter
-    if st.button("Пошук") or st.session_state.get("search_input"):
-        # Валідація введення
-        if not word:
-            st.error("Будь ласка, введіть слово!")
-            return
-        if len(word.split()) > 1:
-            st.error("Введіть тільки одне слово без пробілів!")
+    if st.button("Process Text"):
+        if not input_text.strip():
+            st.error("Please enter some text!")
             return
 
-        # Нормалізація слова
-        original_word = word
-        search_word = word.lower()
-        
-        # Зберігаємо синоніми за джерелами
-        synonyms = {
-            "custom": [],
-            "wiktionary": []
-        }
+        # Tokenize text into words and non-words
+        tokens = re.findall(r'\w+|\W+', input_text)
+        modified_tokens = []
+        synonym_report = {}
 
-        # Пошук у власному словнику
-        if custom_dict:
-            custom_synonyms = custom_dict.get(search_word, [])
-            if custom_synonyms:
-                synonyms["custom"] = custom_synonyms
+        for token in tokens:
+            if re.match(r'^\w+$', token) and token.isalpha():
+                original_word = token
+                search_word = original_word.lower()
 
-        # Пошук у Вікісловнику
-        wiki_synonyms = get_wiktionary_synonyms(search_word)
-        if wiki_synonyms:
-            synonyms["wiktionary"] = wiki_synonyms
+                # Get synonyms from both sources
+                custom_synonyms = custom_dict.get(search_word, [])
+                wiki_synonyms = get_wiktionary_synonyms(search_word)
 
-        # Відображення результатів
-        total_found = sum(len(v) for v in synonyms.values())
-        if total_found > 0:
-            st.success(f"Знайдено {total_found} синонімів для слова '{original_word}':")
+                # Find first available synonym
+                first_synonym = None
+                source = None
+                if custom_synonyms:
+                    first_synonym = custom_synonyms[0]
+                    source = 'custom'
+                elif wiki_synonyms:
+                    first_synonym = wiki_synonyms[0]
+                    source = 'wiktionary'
+
+                if first_synonym:
+                    modified_tokens.append(first_synonym)
+                    synonym_report[original_word] = {
+                        'replaced_with': first_synonym,
+                        'custom_synonyms': custom_synonyms,
+                        'wiki_synonyms': wiki_synonyms,
+                        'source': source
+                    }
+                else:
+                    modified_tokens.append(original_word)
+            else:
+                modified_tokens.append(token)
+
+        # Rebuild modified text
+        modified_text = ''.join(modified_tokens)
+
+        # Display results
+        st.subheader("Modified Text")
+        st.text_area("Result", modified_text, height=300, key="modified_text")
+
+        # Show synonym blocks
+        if synonym_report:
+            st.subheader("Replaced Words")
+            for word, data in synonym_report.items():
+                with st.expander(f"{word} → {data['replaced_with']} ({data['source']})"):
+                    if data['custom_synonyms']:
+                        st.write(f"**Custom synonyms:** {', '.join(data['custom_synonyms'])}")
+                    if data['wiki_synonyms']:
+                        st.write(f"**Wiktionary synonyms:** {', '.join(data['wiki_synonyms'])}")
             
-            # Відображення груп
-            if synonyms["custom"]:
-                with st.expander(f"🔖 З власного словника ({len(synonyms['custom'])})"):
-                    st.write(", ".join(synonyms["custom"]))
-            
-            if synonyms["wiktionary"]:
-                with st.expander(f"🌐 З Вікісловника ({len(synonyms['wiktionary'])})"):
-                    st.write(", ".join(synonyms["wiktionary"]))
-
-            # Експорт результатів
-            export_data = "\n".join(
-                [f"{source}: {', '.join(words)}" 
-                 for source, words in synonyms.items() if words]
-            )
+            # Add download button
             st.download_button(
-                label="Завантажити всі синоніми",
-                data=export_data,
-                file_name=f"синоніми_{search_word}.txt",
+                label="Download Modified Text",
+                data=modified_text,
+                file_name="synonym_replaced_text.txt",
                 mime="text/plain"
             )
         else:
-            st.warning("Синоніми не знайдені в обраних джерелах.")
+            st.warning("No words were replaced with synonyms.")
 
 if __name__ == "__main__":
     main()
